@@ -1,40 +1,37 @@
 // server.js
-// Fully ready for Render deployment (no .env needed)
-
 import express from "express";
 import cors from "cors";
 import OpenAI from "openai";
+import dotenv from "dotenv";
 
-// 1️⃣ Create Express app
+dotenv.config();
+
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json()); // Parse JSON bodies
 
-// 2️⃣ Initialize OpenAI client with API key from Render environment variables
-if (!process.env.OPENAI_API_KEY) {
-  console.error("❌ OPENAI_API_KEY is missing! Set it in Render environment variables.");
-  process.exit(1); // Stop the server if the key is missing
-}
-
+// Initialize OpenAI with API key from environment variables
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-// 3️⃣ Chat endpoint
+// POST endpoint for chatbot
 app.post("/chat", async (req, res) => {
   const { message, conversation } = req.body;
-  if (!message) return res.status(400).json({ error: "No message provided" });
+
+  if (!message || message.trim() === "") {
+    return res.status(400).json({ error: "No message provided" });
+  }
 
   try {
+    // Build messages array for context
     const messages = [
-      {
-        role: "system",
-        content: "You are a helpful AI assistant helping students manage expenses and budgeting."
-      },
+      { role: "system", content: "You are a helpful AI assistant helping students manage expenses and budget." },
       ...(conversation || []),
       { role: "user", content: message }
     ];
 
+    // Call OpenAI
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages,
@@ -44,11 +41,11 @@ app.post("/chat", async (req, res) => {
     const reply = response.choices[0].message.content;
     res.json({ reply });
   } catch (err) {
-    console.error("OpenAI API error:", err);
+    console.error("OpenAI error:", err);
     res.status(500).json({ error: "OpenAI API error" });
   }
 });
 
-// 4️⃣ Start server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+// Use the port Render provides, fallback to 3000 locally
+const port = process.env.PORT || 3000;
+app.listen(port, () => console.log(`Server running on port ${port}`));
