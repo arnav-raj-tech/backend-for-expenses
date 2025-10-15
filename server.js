@@ -1,62 +1,63 @@
 // server.js
+
+import dotenv from "dotenv";
+dotenv.config(); // Load environment variables first
+
 import express from "express";
 import cors from "cors";
-import fetch from "node-fetch";
-import dotenv from "dotenv";
+import OpenAI from "openai";
 
-dotenv.config();
 const app = express();
-const port = process.env.PORT || 10000;
-
 app.use(cors());
 app.use(express.json());
 
-// POST /chat endpoint
+// --- Check if API key is present ---
+if (!process.env.OPENAI_API_KEY) {
+  console.error("❌ Missing OPENAI_API_KEY in .env file!");
+  process.exit(1);
+}
+
+// --- Initialize OpenAI Client ---
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// --- Chat Endpoint ---
 app.post("/chat", async (req, res) => {
-  const { message } = req.body;
+  const { message, conversation } = req.body;
 
   if (!message) {
     return res.status(400).json({ error: "No message provided" });
   }
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+    const messages = [
+      {
+        role: "system",
+        content:
+          "You are ExpenseAI — a friendly chatbot that helps students manage expenses, save money, and plan budgets smartly.",
       },
-      body: JSON.stringify({
-        model: "gpt-3.5-turbo",
-        messages: [
-          {
-            role: "system",
-            content: "You are Expense AI, a friendly chatbot that helps students manage their budget and expenses. Give short, useful replies.",
-          },
-          {
-            role: "user",
-            content: message,
-          },
-        ],
-      }),
+      ...(conversation || []),
+      { role: "user", content: message },
+    ];
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini", // Fast and affordable model
+      messages,
+      max_tokens: 150,
+      temperature: 0.8,
     });
 
-    if (!response.ok) {
-      const errorData = await response.text();
-      console.error("OpenAI error:", errorData);
-      return res.status(500).json({ error: "OpenAI API Error" });
-    }
-
-    const data = await response.json();
-    const reply = data.choices?.[0]?.message?.content?.trim() || "Sorry, I didn’t catch that.";
+    const reply = response.choices[0].message.content;
     res.json({ reply });
-
-  } catch (err) {
-    console.error("Server error:", err);
-    res.status(500).json({ error: "Server error. Please try again." });
+  } catch (error) {
+    console.error("🔥 OpenAI API Error:", error);
+    res.status(500).json({ error: "OpenAI API error" });
   }
 });
 
-app.listen(port, () => {
-  console.log(`🚀 Server running on port ${port}`);
+// --- Start Server ---
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
